@@ -21,6 +21,7 @@ import homeassistant.helpers.config_validation as cv
 import homeassistant.util.dt as dt_util
 
 REQUIREMENTS = ['pychromecast==0.7.6']
+REQUIREMENTS +=['youtube_dl==2017.1.24']
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -302,8 +303,34 @@ class CastDevice(MediaPlayerDevice):
         """Seek the media to a specific location."""
         self.cast.media_controller.seek(position)
 
+    def get_youtube_url(self,media_id):
+        """Translate a youtube url to a useable format via youtube-dl"""
+        import youtube_dl
+
+        ydl = youtube_dl.YoutubeDL({'outtmpl': '%(id)s%(ext)s'})
+
+        with ydl:
+            result = ydl.extract_info(
+                media_id,
+                download=False # We just want to extract the info
+            )
+
+        if 'entries' in result:
+            # Can be a playlist or a list of videos
+            video = result['entries'][0]
+        else:
+            # Just a video
+            video = result
+        
+        return video['url']
+
     def play_media(self, media_type, media_id, **kwargs):
         """Play media from a URL."""
+        if media_type == "audio/youtube":
+            #manually set the media type back to audio/mp4
+            media_type = 'audio/mp4'
+            #lookup the url via youtube-dl
+            media_id = self.get_youtube_url(media_id)
         self.cast.media_controller.play_media(media_id, media_type)
 
     # Implementation of chromecast status_listener methods
@@ -317,3 +344,4 @@ class CastDevice(MediaPlayerDevice):
         self.media_status = status
         self.media_status_received = dt_util.utcnow()
         self.schedule_update_ha_state()
+        
